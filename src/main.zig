@@ -1,10 +1,15 @@
 const std = @import("std");
 
-fn findTags(node: *std.zig.ast.Node) void {
-    std.debug.warn("{}\n", @tagName(node.id));
+fn findTags(tree: *std.zig.ast.Tree, node: *std.zig.ast.Node) void {
+    if (node.id == std.zig.ast.Node.Id.FnProto) {
+        const fn_node = @fieldParentPtr(std.zig.ast.Node.FnProto, "base", node);
+        const token_idx = fn_node.name_token.?;
+        std.debug.warn("{}\n", tree.tokenSlice(token_idx));
+    }
+
     var child_i: usize = 0;
     while (node.iterate(child_i)) |child| : (child_i += 1) {
-        findTags(child);
+        findTags(tree, child);
     }
 }
 
@@ -18,8 +23,8 @@ pub fn main() !void {
     defer allocator.free(path);
     const source = try std.io.readFileAlloc(allocator, path);
     defer allocator.free(source);
-    var ast = try std.zig.parse(allocator, source);
-    defer ast.deinit();
+    var tree = try std.zig.parse(allocator, source);
+    defer tree.deinit();
 
-    findTags(&ast.root_node.base);
+    findTags(&tree, &tree.root_node.base);
 }
