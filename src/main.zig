@@ -48,50 +48,67 @@ const ErrorSet = error {
     OutOfMemory,
 };
 
-fn findTags(allocator: *std.mem.Allocator, tree: *std.zig.ast.Tree, node: *std.zig.ast.Node, path: []const u8, scope_field_name: []const u8, scope: []const u8) ErrorSet!void {
+const ParseArgs = struct {
+    allocator: *std.mem.Allocator,
+    tree: *std.zig.ast.Tree,
+    node: *std.zig.ast.Node,
+    path: []const u8,
+    scope_field_name: []const u8,
+    scope: []const u8,
+};
+
+fn findTags(args: *const ParseArgs) ErrorSet!void {
     var token_index : ?std.zig.ast.TokenIndex = null;
-    switch (node.id) {
+    switch (args.node.id) {
         std.zig.ast.Node.Id.StructField => {
-            const struct_field = node.cast(std.zig.ast.Node.StructField).?;
+            const struct_field = args.node.cast(std.zig.ast.Node.StructField).?;
             token_index = struct_field.name_token;
         },
         std.zig.ast.Node.Id.UnionTag => {
-            const union_tag = node.cast(std.zig.ast.Node.UnionTag).?;
+            const union_tag = args.node.cast(std.zig.ast.Node.UnionTag).?;
             token_index = union_tag.name_token;
         },
         std.zig.ast.Node.Id.EnumTag => {
-            const enum_tag = node.cast(std.zig.ast.Node.EnumTag).?;
+            const enum_tag = args.node.cast(std.zig.ast.Node.EnumTag).?;
             token_index = enum_tag.name_token;
         },
         std.zig.ast.Node.Id.FnProto => {
-            const fn_node = node.cast(std.zig.ast.Node.FnProto).?;
+            const fn_node = args.node.cast(std.zig.ast.Node.FnProto).?;
             if (fn_node.name_token) |name_index| {
                 token_index = name_index;
             }
         },
         std.zig.ast.Node.Id.VarDecl => blk: {
-            const var_node = node.cast(std.zig.ast.Node.VarDecl).?;
+            const var_node = args.node.cast(std.zig.ast.Node.VarDecl).?;
             token_index = var_node.name_token;
 
             if (var_node.init_node) |init_node| {
                 if (init_node.id == std.zig.ast.Node.Id.ContainerDecl) {
                     const container_node = init_node.cast(std.zig.ast.Node.ContainerDecl).?;
-                    const container_kind = tree.tokenSlice(container_node.kind_token);
-                    const container_name = tree.tokenSlice(token_index.?);
+                    const container_kind = args.tree.tokenSlice(container_node.kind_token);
+                    const container_name = args.tree.tokenSlice(token_index.?);
                     const delim = ".";
                     var sub_scope : []u8 = undefined;
-                    if (scope.len > 0) {
-                        sub_scope = try allocator.alloc(u8, scope.len + delim.len + container_name.len);
-                        std.mem.copy(u8, sub_scope[0..scope.len], scope);
-                        std.mem.copy(u8, sub_scope[scope.len..scope.len+delim.len], delim);
-                        std.mem.copy(u8, sub_scope[scope.len+delim.len..], container_name);
+                    if (args.scope.len > 0) {
+                        sub_scope = try args.allocator.alloc(u8, args.scope.len + delim.len + container_name.len);
+                        std.mem.copy(u8, sub_scope[0..args.scope.len], args.scope);
+                        std.mem.copy(u8, sub_scope[args.scope.len..args.scope.len+delim.len], delim);
+                        std.mem.copy(u8, sub_scope[args.scope.len+delim.len..], container_name);
                     } else {
-                        sub_scope = try std.mem.dupe(allocator, u8, container_name);
+                        sub_scope = try std.mem.dupe(args.allocator, u8, container_name);
                     }
-                    defer allocator.free(sub_scope);
+                    defer args.allocator.free(sub_scope);
                     var it = container_node.fields_and_decls.iterator(0);
                     while (it.next()) |child| {
-                        try findTags(allocator, tree, child.*, path, container_kind, sub_scope);
+                        const child_args = ParseArgs{
+                            .allocator = args.allocator,
+                            .tree = args.tree,
+                            .node = child.*,
+                            .path = args.path,
+                            .scope_field_name = container_kind,
+                            .scope = sub_scope,
+                        };
+                        try findTags(&child_args);
                     }
                 }
             }
@@ -103,19 +120,19 @@ fn findTags(allocator: *std.mem.Allocator, tree: *std.zig.ast.Tree, node: *std.z
         return;
     }
 
-    const name = tree.tokenSlice(token_index.?);
-    const location = tree.tokenLocation(0, token_index.?);
-    const line = tree.source[location.line_start..location.line_end];
-    const escaped_line = try escapeString(allocator, line);
-    defer allocator.free(escaped_line);
+    const name = args.tree.tokenSlice(token_index.?);
+    const location = args.tree.tokenLocation(0, token_index.?);
+    const line = args.tree.source[location.line_start..location.line_end];
+    const escaped_line = try escapeString(args.allocator, line);
+    defer args.allocator.free(escaped_line);
 
     std.debug.warn("{}\t{}\t/^{}$/\";\t{c}",
         name,
-        path,
+        args.path,
         escaped_line,
-        tagKind(tree, node));
-    if (scope.len > 0) {
-        std.debug.warn("\t{}:{}", scope_field_name, scope);
+        tagKind(args.tree, args.node));
+    if (args.scope.len > 0) {
+        std.debug.warn("\t{}:{}", args.scope_field_name, args.scope);
     }
     std.debug.warn("\n");
 }
@@ -136,6 +153,13 @@ pub fn main() !void {
     const node = &tree.root_node.base;
     var child_i: usize = 0;
     while (node.iterate(child_i)) |child| : (child_i += 1) {
-        try findTags(allocator, &tree, child, path, "", "");
+        const child_args = ParseArgs{
+            .allocator = allocator,
+            .tree = &tree,
+            .node = child,
+            .path = path,
+            .scope_field_name = "",
+            .scope = ""};
+        try findTags(&child_args);
     }
 }
