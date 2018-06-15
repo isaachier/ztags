@@ -13,7 +13,8 @@ Add this to your `.vimrc` (fixing `ctagsbin` accordingly):
             \ 'u:unions',
             \ 'e:enums',
             \ 'v:variables',
-            \ 'm:members'
+            \ 'm:members',
+            \ 'f:functions'
         \ ],
         \ 'sro' : '.',
         \ 'kind2scope' : {
