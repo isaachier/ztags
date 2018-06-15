@@ -46,6 +46,7 @@ fn escapeString(allocator: *std.mem.Allocator, line: []const u8) ![]const u8 {
 
 const ErrorSet = error {
     OutOfMemory,
+    WriteError,
 };
 
 const ParseArgs = struct {
@@ -55,6 +56,7 @@ const ParseArgs = struct {
     path: []const u8,
     scope_field_name: []const u8,
     scope: []const u8,
+    tags_file_stream: *std.io.FileOutStream.Stream,
 };
 
 fn findTags(args: *const ParseArgs) ErrorSet!void {
@@ -107,6 +109,7 @@ fn findTags(args: *const ParseArgs) ErrorSet!void {
                             .path = args.path,
                             .scope_field_name = container_kind,
                             .scope = sub_scope,
+                            .tags_file_stream = args.tags_file_stream,
                         };
                         try findTags(&child_args);
                     }
@@ -126,15 +129,16 @@ fn findTags(args: *const ParseArgs) ErrorSet!void {
     const escaped_line = try escapeString(args.allocator, line);
     defer args.allocator.free(escaped_line);
 
-    std.debug.warn("{}\t{}\t/^{}$/\";\t{c}",
+    args.tags_file_stream.print(
+        "{}\t{}\t/^{}$/;\"\t{c}",
         name,
         args.path,
         escaped_line,
-        tagKind(args.tree, args.node));
+        tagKind(args.tree, args.node)) catch return ErrorSet.WriteError;
     if (args.scope.len > 0) {
-        std.debug.warn("\t{}:{}", args.scope_field_name, args.scope);
+        args.tags_file_stream.print("\t{}:{}", args.scope_field_name, args.scope) catch return ErrorSet.WriteError;
     }
-    std.debug.warn("\n");
+    args.tags_file_stream.print("\n") catch return ErrorSet.WriteError;
 }
 
 pub fn main() !void {
@@ -150,6 +154,10 @@ pub fn main() !void {
     var tree = try std.zig.parse(allocator, source);
     defer tree.deinit();
 
+    var stdout_file = try std.io.getStdOut();
+    var stdout_file_stream = std.io.FileOutStream.init(&stdout_file);
+    const stdout = &stdout_file_stream.stream;
+
     const node = &tree.root_node.base;
     var child_i: usize = 0;
     while (node.iterate(child_i)) |child| : (child_i += 1) {
@@ -159,7 +167,9 @@ pub fn main() !void {
             .node = child,
             .path = path,
             .scope_field_name = "",
-            .scope = ""};
+            .scope = "",
+            .tags_file_stream = stdout,
+        };
         try findTags(&child_args);
     }
 }
