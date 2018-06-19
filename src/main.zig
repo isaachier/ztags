@@ -15,6 +15,10 @@ fn tagKind(tree: *std.zig.ast.Tree, node: *std.zig.ast.Node) u8 {
                         else => u8(0),
                     };
                 }
+                else if (init_node.id == std.zig.ast.Node.Id.ErrorType or
+                         init_node.id == std.zig.ast.Node.Id.ErrorSetDecl) {
+                    return 'r';
+                }
             }
             break :blk 'v';
         },
@@ -113,6 +117,9 @@ fn findTags(args: *const ParseArgs) ErrorSet!void {
                         };
                         try findTags(&child_args);
                     }
+                }
+                else if (init_node.id == std.zig.ast.Node.Id.ErrorSetDecl or
+                         init_node.id == std.zig.ast.Node.Id.ErrorType) {
                 }
             }
         },
