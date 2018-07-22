@@ -14,17 +14,15 @@ fn tagKind(tree: *std.zig.ast.Tree, node: *std.zig.ast.Node) u8 {
                         std.zig.Token.Id.Keyword_enum => 'e',
                         else => u8(0),
                     };
-                }
-                else if (init_node.id == std.zig.ast.Node.Id.ErrorType or
-                         init_node.id == std.zig.ast.Node.Id.ErrorSetDecl) {
+                } else if (init_node.id == std.zig.ast.Node.Id.ErrorType or
+                    init_node.id == std.zig.ast.Node.Id.ErrorSetDecl)
+                {
                     return 'r';
                 }
             }
             break :blk 'v';
         },
-        std.zig.ast.Node.Id.StructField,
-        std.zig.ast.Node.Id.UnionTag,
-        std.zig.ast.Node.Id.EnumTag => 'm',
+        std.zig.ast.Node.Id.StructField, std.zig.ast.Node.Id.UnionTag, std.zig.ast.Node.Id.EnumTag => 'm',
         else => u8(0),
     };
 }
@@ -48,7 +46,7 @@ fn escapeString(allocator: *std.mem.Allocator, line: []const u8) ![]const u8 {
     return result.toOwnedSlice();
 }
 
-const ErrorSet = error {
+const ErrorSet = error{
     OutOfMemory,
     WriteError,
 };
@@ -64,7 +62,7 @@ const ParseArgs = struct {
 };
 
 fn findTags(args: *const ParseArgs) ErrorSet!void {
-    var token_index : ?std.zig.ast.TokenIndex = null;
+    var token_index: ?std.zig.ast.TokenIndex = null;
     switch (args.node.id) {
         std.zig.ast.Node.Id.StructField => {
             const struct_field = args.node.cast(std.zig.ast.Node.StructField).?;
@@ -94,12 +92,12 @@ fn findTags(args: *const ParseArgs) ErrorSet!void {
                     const container_kind = args.tree.tokenSlice(container_node.kind_token);
                     const container_name = args.tree.tokenSlice(token_index.?);
                     const delim = ".";
-                    var sub_scope : []u8 = undefined;
+                    var sub_scope: []u8 = undefined;
                     if (args.scope.len > 0) {
                         sub_scope = try args.allocator.alloc(u8, args.scope.len + delim.len + container_name.len);
                         std.mem.copy(u8, sub_scope[0..args.scope.len], args.scope);
-                        std.mem.copy(u8, sub_scope[args.scope.len..args.scope.len+delim.len], delim);
-                        std.mem.copy(u8, sub_scope[args.scope.len+delim.len..], container_name);
+                        std.mem.copy(u8, sub_scope[args.scope.len .. args.scope.len + delim.len], delim);
+                        std.mem.copy(u8, sub_scope[args.scope.len + delim.len ..], container_name);
                     } else {
                         sub_scope = try std.mem.dupe(args.allocator, u8, container_name);
                     }
@@ -117,10 +115,9 @@ fn findTags(args: *const ParseArgs) ErrorSet!void {
                         };
                         try findTags(&child_args);
                     }
-                }
-                else if (init_node.id == std.zig.ast.Node.Id.ErrorSetDecl or
-                         init_node.id == std.zig.ast.Node.Id.ErrorType) {
-                }
+                } else if (init_node.id == std.zig.ast.Node.Id.ErrorSetDecl or
+                    init_node.id == std.zig.ast.Node.Id.ErrorType)
+                {}
             }
         },
         else => {},
@@ -136,12 +133,7 @@ fn findTags(args: *const ParseArgs) ErrorSet!void {
     const escaped_line = try escapeString(args.allocator, line);
     defer args.allocator.free(escaped_line);
 
-    args.tags_file_stream.print(
-        "{}\t{}\t/^{}$/;\"\t{c}",
-        name,
-        args.path,
-        escaped_line,
-        tagKind(args.tree, args.node)) catch return ErrorSet.WriteError;
+    args.tags_file_stream.print("{}\t{}\t/^{}$/;\"\t{c}", name, args.path, escaped_line, tagKind(args.tree, args.node)) catch return ErrorSet.WriteError;
     if (args.scope.len > 0) {
         args.tags_file_stream.print("\t{}:{}", args.scope_field_name, args.scope) catch return ErrorSet.WriteError;
     }
@@ -153,7 +145,7 @@ pub fn main() !void {
     defer direct_allocator.deinit();
     const allocator = &direct_allocator.allocator;
     var args_it = std.os.args();
-    _ = args_it.skip();  // Discard program name
+    _ = args_it.skip(); // Discard program name
     const path = try args_it.next(allocator).?;
     defer allocator.free(path);
     const source = try std.io.readFileAlloc(allocator, path);
