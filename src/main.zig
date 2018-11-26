@@ -58,7 +58,7 @@ const ParseArgs = struct {
     path: []const u8,
     scope_field_name: []const u8,
     scope: []const u8,
-    tags_file_stream: *std.io.FileOutStream.Stream,
+    tags_file_stream: *std.os.File.OutStream.Stream,
 };
 
 fn findTags(args: *const ParseArgs) ErrorSet!void {
@@ -154,9 +154,7 @@ pub fn main() !void {
     defer tree.deinit();
 
     var stdout_file = try std.io.getStdOut();
-    var stdout_file_stream = std.io.FileOutStream.init(&stdout_file);
-    const stdout = &stdout_file_stream.stream;
-
+    const stdout = &stdout_file.outStream().stream;
     const node = &tree.root_node.base;
     var child_i: usize = 0;
     while (node.iterate(child_i)) |child| : (child_i += 1) {
